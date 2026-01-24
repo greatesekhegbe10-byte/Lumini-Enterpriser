@@ -1,0 +1,7 @@
+{
+  "name": "Lumina Secure Tech Ecosystem",
+  "description": "Enterprise-grade SaaS, premium digital assets, and elite cybersecurity services marketplace powered by advanced AI discovery.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
