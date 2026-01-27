@@ -2,9 +2,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, Send, X, Shield, Sparkles } from 'lucide-react';
 import { getAIResponse } from '../services/geminiService';
-import { ChatMessage } from '../types';
+import { ChatMessage, Product } from '../types';
 
-export const AIChat: React.FC = () => {
+interface AIChatProps {
+  products: Product[];
+}
+
+export const AIChat: React.FC<AIChatProps> = ({ products }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'model', content: "Lumina Secure Systems Online. I am your Technical Consultant. How can I assist with your infrastructure hardening today?" }
@@ -27,7 +31,7 @@ export const AIChat: React.FC = () => {
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setIsTyping(true);
 
-    const response = await getAIResponse(userMsg, messages);
+    const response = await getAIResponse(userMsg, messages, products);
     setMessages(prev => [...prev, { role: 'model', content: response }]);
     setIsTyping(false);
   };

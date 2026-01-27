@@ -16,6 +16,17 @@ export interface CartItem extends Product {
   quantity: number;
 }
 
+export interface Order {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  items: CartItem[];
+  total: number;
+  date: string;
+  status: 'Completed' | 'Pending';
+  paymentMethod: 'Paystack' | 'Flutterwave';
+}
+
 export enum Category {
   SAAS = 'SaaS Software',
   TRADING_BOTS = 'Trading Bots',
