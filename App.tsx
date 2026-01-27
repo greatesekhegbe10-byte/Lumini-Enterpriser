@@ -1,5 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { usePaystackPayment } from 'react-paystack';
+import { useFlutterwave, closePaymentModal } from 'flutterwave-react-v3';
 import { products, faqs } from './data';
 import { Product, CartItem, Category } from './types';
 import { ProductCard } from './components/ProductCard';
@@ -16,6 +18,10 @@ import {
   MessageCircle, Twitter
 } from 'lucide-react';
 
+// Payment Keys
+const PAYSTACK_KEY = 'pk_live_5cd9061dc23feea681bde61151e06200251bb359';
+const FLUTTERWAVE_KEY = 'FLWPUBK-2283d9d85c854253a59b635a730a2c8d-X';
+
 const App: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<Category>(Category.ALL);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -31,6 +37,7 @@ const App: React.FC = () => {
   const [ownedProducts, setOwnedProducts] = useState<Product[]>([]);
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
+  const [checkoutDetails, setCheckoutDetails] = useState({ name: '', email: '' });
   
   // Advanced Filters
   const [priceRange, setPriceRange] = useState<number>(5000);
@@ -47,6 +54,40 @@ const App: React.FC = () => {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [view]);
+
+  // Derived State
+  const cartTotal = useMemo(() => cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0), [cartItems]);
+
+  // Payment Configs
+  const paystackConfig = useMemo(() => ({
+    reference: `lumina_${new Date().getTime()}`,
+    email: checkoutDetails.email,
+    amount: cartTotal * 100, // Paystack expects Kobo
+    publicKey: PAYSTACK_KEY,
+    currency: 'USD',
+  }), [checkoutDetails.email, cartTotal]);
+
+  const flutterwaveConfig = useMemo(() => ({
+    public_key: FLUTTERWAVE_KEY,
+    tx_ref: `lumina_${Date.now()}`,
+    amount: cartTotal,
+    currency: 'USD',
+    payment_options: 'card,mobilemoney,ussd',
+    customer: {
+      email: checkoutDetails.email,
+      phone_number: '',
+      name: checkoutDetails.name,
+    },
+    customizations: {
+      title: 'Lumina Secure Ecosystem',
+      description: 'Enterprise Asset Provisioning',
+      logo: 'https://cdn-icons-png.flaticon.com/512/2092/2092663.png',
+    },
+  }), [checkoutDetails, cartTotal]);
+
+  // Payment Hooks
+  const initializePaystack = usePaystackPayment(paystackConfig);
+  const handleFlutterwave = useFlutterwave(flutterwaveConfig);
 
   const addToCart = (product: Product) => {
     setCartItems(prev => {
@@ -76,7 +117,7 @@ const App: React.FC = () => {
     setCheckoutStep(1);
   };
 
-  const processOrder = () => {
+  const processOrderSuccess = () => {
     setIsProcessingCheckout(true);
     setTimeout(() => {
       const newOwned = [...ownedProducts, ...cartItems.map(item => ({ ...item }))];
@@ -85,7 +126,26 @@ const App: React.FC = () => {
       setCartItems([]);
       setIsProcessingCheckout(false);
       setCheckoutStep(3);
-    }, 2500);
+    }, 2000);
+  };
+
+  const handlePaystackPayment = () => {
+    initializePaystack({
+      onSuccess: () => processOrderSuccess(),
+      onClose: () => setIsProcessingCheckout(false),
+    });
+  };
+
+  const handleFlutterwavePayment = () => {
+    handleFlutterwave({
+      callback: (response) => {
+        closePaymentModal();
+        if (response.status === "successful") {
+          processOrderSuccess();
+        }
+      },
+      onClose: () => setIsProcessingCheckout(false),
+    });
   };
 
   const handleContactSubmit = (e: React.FormEvent) => {
@@ -142,7 +202,6 @@ const App: React.FC = () => {
   const navigateTo = (newView: typeof view, sectionId?: string) => {
     setView(newView);
     if (sectionId) {
-      // Small timeout to allow the view to switch before scrolling to the element
       setTimeout(() => {
         const element = document.getElementById(sectionId);
         if (element) {
@@ -165,7 +224,6 @@ const App: React.FC = () => {
   );
 
   const renderCheckout = () => {
-    const total = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex flex-col lg:flex-row gap-12">
@@ -179,25 +237,39 @@ const App: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Legal Full Name</label>
-                        <input type="text" placeholder="John Doe" className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <input 
+                          type="text" 
+                          placeholder="John Doe" 
+                          value={checkoutDetails.name}
+                          onChange={(e) => setCheckoutDetails(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+                        />
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Business Email</label>
-                        <input type="email" placeholder="john@company.io" className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <input 
+                          type="email" 
+                          placeholder="john@company.io" 
+                          value={checkoutDetails.email}
+                          onChange={(e) => setCheckoutDetails(prev => ({ ...prev, email: e.target.value }))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+                        />
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <h3 className="text-xl font-black flex items-center gap-3"><CreditCard className="text-indigo-500" /> Payment Details</h3>
-                    <div className="bg-slate-950 border border-slate-800 rounded-3xl p-8 space-y-6">
-                      <input type="text" placeholder="Card Number" className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-5 text-sm outline-none" />
-                      <div className="grid grid-cols-2 gap-6">
-                        <input type="text" placeholder="MM/YY" className="bg-slate-900 border border-slate-700 rounded-2xl p-5 text-sm outline-none" />
-                        <input type="text" placeholder="CVV" className="bg-slate-900 border border-slate-700 rounded-2xl p-5 text-sm outline-none" />
-                      </div>
-                    </div>
-                  </div>
-                  <button onClick={() => setCheckoutStep(2)} className="w-full bg-indigo-600 py-6 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-500 transition-all shadow-2xl">Review Order Strategy</button>
+                  
+                  <button 
+                    onClick={() => {
+                      if (checkoutDetails.name && checkoutDetails.email) {
+                        setCheckoutStep(2);
+                      } else {
+                        alert("Please complete identity verification to proceed.");
+                      }
+                    }} 
+                    className="w-full bg-indigo-600 py-6 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-indigo-500 transition-all shadow-2xl"
+                  >
+                    Initialize Secure Gateway
+                  </button>
                 </div>
               </div>
             )}
@@ -221,15 +293,30 @@ const App: React.FC = () => {
                   </div>
                   <div className="pt-8 flex justify-between items-center text-3xl font-black border-t border-slate-800">
                     <span className="uppercase tracking-tighter">Total Investment</span>
-                    <span className="text-indigo-500">${total.toLocaleString()}</span>
+                    <span className="text-indigo-500">${cartTotal.toLocaleString()}</span>
                   </div>
-                  <button 
-                    disabled={isProcessingCheckout}
-                    onClick={processOrder} 
-                    className="w-full bg-emerald-500 py-6 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-emerald-400 shadow-2xl disabled:opacity-50 flex items-center justify-center gap-4 transition-all"
-                  >
-                    {isProcessingCheckout ? <><Loader2 className="animate-spin" /> Provisioning Infrastructure...</> : <><ShieldCheck className="w-6 h-6" /> Execute Secure Purchase</>}
-                  </button>
+
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest text-center">Select Payment Vector</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <button 
+                        disabled={isProcessingCheckout}
+                        onClick={handlePaystackPayment}
+                        className="w-full bg-[#0ba4db] py-6 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#0993c4] shadow-2xl shadow-blue-500/10 disabled:opacity-50 flex items-center justify-center gap-3 transition-all"
+                      >
+                        {isProcessingCheckout ? <Loader2 className="animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
+                        Pay with Paystack
+                      </button>
+                      <button 
+                        disabled={isProcessingCheckout}
+                        onClick={handleFlutterwavePayment}
+                        className="w-full bg-[#f5a623] text-slate-950 py-6 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#df951c] shadow-2xl shadow-amber-500/10 disabled:opacity-50 flex items-center justify-center gap-3 transition-all"
+                      >
+                         {isProcessingCheckout ? <Loader2 className="animate-spin" /> : <Zap className="w-5 h-5" />}
+                        Pay with Flutterwave
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
