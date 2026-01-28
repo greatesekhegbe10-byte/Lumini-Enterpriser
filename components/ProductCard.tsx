@@ -1,7 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Product, Category } from '../types';
-import { Shield, Zap, Download, CreditCard, Star, ArrowUpRight, Bot, Layout, ShoppingCart, Check } from 'lucide-react';
+import { Shield, Zap, Download, CreditCard, Star, ArrowUpRight, Bot, Layout, ShoppingCart, Check, ImageOff } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -10,6 +10,10 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onViewDetails }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=800';
+
   const getButtonText = () => {
     switch(product.billingModel) {
       case 'Subscription': return 'Activate Sub';
@@ -37,23 +41,35 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
     <div className={`group bg-slate-900 rounded-[48px] shadow-2xl transition-all duration-500 overflow-hidden flex flex-col h-full border border-slate-800 hover:border-${accent}-500/50 relative hover:-translate-y-2`}>
       <div className={`absolute -inset-1 bg-gradient-to-r from-${accent}-500/0 via-${accent}-500/10 to-${accent}-500/0 opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-500 pointer-events-none`} />
       
-      <div className="relative overflow-hidden h-64 shrink-0">
-        <img 
-          src={product.image} 
-          alt={product.name} 
-          className="w-full h-full object-cover group-hover:scale-110 transition-all duration-1000 opacity-60 group-hover:opacity-90 grayscale-[0.5] group-hover:grayscale-0"
-          loading="lazy"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/10 to-transparent" />
+      <div className="relative overflow-hidden h-64 shrink-0 bg-slate-800">
+        {/* Loading Skeleton */}
+        {!isLoaded && !hasError && (
+          <div className="absolute inset-0 bg-slate-800 animate-pulse z-10 flex items-center justify-center">
+             <div className="w-8 h-8 border-2 border-slate-700 border-t-indigo-500 rounded-full animate-spin" />
+          </div>
+        )}
         
-        <div className="absolute top-8 left-8">
+        <img 
+          src={hasError ? FALLBACK_IMAGE : product.image} 
+          alt={product.name} 
+          className={`w-full h-full object-cover transition-all duration-1000 ease-out 
+            ${isLoaded ? 'opacity-60 group-hover:opacity-90 grayscale-[0.5] group-hover:grayscale-0 group-hover:scale-110' : 'opacity-0 scale-105'}
+          `}
+          loading="lazy"
+          onLoad={() => setIsLoaded(true)}
+          onError={() => { setHasError(true); setIsLoaded(true); }}
+        />
+        
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/10 to-transparent pointer-events-none" />
+        
+        <div className="absolute top-8 left-8 z-20">
           <div className="bg-slate-950/90 backdrop-blur-xl px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-white flex items-center gap-3 border border-slate-800 shadow-2xl">
             {getCategoryIcon()}
             {product.category}
           </div>
         </div>
 
-        <div className="absolute bottom-8 left-8 right-8">
+        <div className="absolute bottom-8 left-8 right-8 z-20">
            <div className="flex items-center gap-1.5 mb-3">
              {[...Array(5)].map((_, i) => (
                <Star key={i} className={`w-3.5 h-3.5 ${i < Math.floor(product.rating) ? 'fill-amber-500 text-amber-500' : 'text-slate-800'}`} />

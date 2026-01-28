@@ -14,6 +14,7 @@ interface CartDrawerProps {
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, items, onUpdateQuantity, onRemove, onCheckout }) => {
   const total = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=800';
 
   if (!isOpen) return null;
 
@@ -45,7 +46,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, items, 
           ) : (
             items.map((item) => (
               <div key={item.id} className="flex gap-5 items-start">
-                <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-2xl border border-slate-800" />
+                <img 
+                  src={item.image} 
+                  alt={item.name} 
+                  onError={(e) => { e.currentTarget.src = FALLBACK_IMAGE; e.currentTarget.onerror = null; }}
+                  className="w-20 h-20 object-cover rounded-2xl border border-slate-800 bg-slate-800" 
+                />
                 <div className="flex-grow">
                   <div className="flex justify-between items-start">
                     <div>
