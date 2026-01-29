@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Product, Category } from '../types';
-import { Shield, Zap, Download, CreditCard, Star, ArrowUpRight, Bot, Layout, ShoppingCart, Check, ImageOff } from 'lucide-react';
+import { Shield, Zap, Download, CreditCard, Star, ArrowUpRight, Bot, Layout, ShoppingCart, Check } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -33,13 +33,44 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
     }
   };
 
-  const accent = product.category === Category.CYBERSECURITY ? 'red' : 
-                 product.category === Category.ECOMMERCE_DEV ? 'emerald' : 
-                 product.category === Category.TRADING_BOTS ? 'blue' : 'indigo';
+  // Static maps for color styles to ensure Tailwind detects them
+  const borderColorMap: Record<string, string> = {
+    [Category.SAAS]: 'hover:border-amber-500/50',
+    [Category.TRADING_BOTS]: 'hover:border-blue-500/50',
+    [Category.TEMPLATES]: 'hover:border-purple-500/50',
+    [Category.ECOMMERCE_DEV]: 'hover:border-emerald-500/50',
+    [Category.CYBERSECURITY]: 'hover:border-red-500/50',
+    [Category.DIGITAL_ASSETS]: 'hover:border-indigo-500/50',
+    [Category.ALL]: 'hover:border-indigo-500/50',
+  };
+
+  const gradientColorMap: Record<string, string> = {
+    [Category.SAAS]: 'from-amber-500/0 via-amber-500/10 to-amber-500/0',
+    [Category.TRADING_BOTS]: 'from-blue-500/0 via-blue-500/10 to-blue-500/0',
+    [Category.TEMPLATES]: 'from-purple-500/0 via-purple-500/10 to-purple-500/0',
+    [Category.ECOMMERCE_DEV]: 'from-emerald-500/0 via-emerald-500/10 to-emerald-500/0',
+    [Category.CYBERSECURITY]: 'from-red-500/0 via-red-500/10 to-red-500/0',
+    [Category.DIGITAL_ASSETS]: 'from-indigo-500/0 via-indigo-500/10 to-indigo-500/0',
+    [Category.ALL]: 'from-indigo-500/0 via-indigo-500/10 to-indigo-500/0',
+  };
+
+  const iconBgMap: Record<string, string> = {
+    [Category.SAAS]: 'bg-amber-500/10 border-amber-500/20 text-amber-500',
+    [Category.TRADING_BOTS]: 'bg-blue-500/10 border-blue-500/20 text-blue-500',
+    [Category.TEMPLATES]: 'bg-purple-500/10 border-purple-500/20 text-purple-500',
+    [Category.ECOMMERCE_DEV]: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500',
+    [Category.CYBERSECURITY]: 'bg-red-500/10 border-red-500/20 text-red-500',
+    [Category.DIGITAL_ASSETS]: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-500',
+    [Category.ALL]: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-500',
+  };
+
+  const hoverBorderClass = borderColorMap[product.category] || 'hover:border-indigo-500/50';
+  const gradientClass = gradientColorMap[product.category] || 'from-indigo-500/0 via-indigo-500/10 to-indigo-500/0';
+  const iconStyleClass = iconBgMap[product.category] || 'bg-indigo-500/10 border-indigo-500/20 text-indigo-500';
 
   return (
-    <div className={`group bg-slate-900 rounded-[48px] shadow-2xl transition-all duration-500 overflow-hidden flex flex-col h-full border border-slate-800 hover:border-${accent}-500/50 relative hover:-translate-y-2`}>
-      <div className={`absolute -inset-1 bg-gradient-to-r from-${accent}-500/0 via-${accent}-500/10 to-${accent}-500/0 opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-500 pointer-events-none`} />
+    <div className={`group bg-slate-900 rounded-[48px] shadow-2xl transition-all duration-500 overflow-hidden flex flex-col h-full border border-slate-800 relative hover:-translate-y-2 ${hoverBorderClass}`}>
+      <div className={`absolute -inset-1 bg-gradient-to-r opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-500 pointer-events-none ${gradientClass}`} />
       
       <div className="relative overflow-hidden h-64 shrink-0 bg-slate-800">
         {/* Loading Skeleton */}
@@ -91,8 +122,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, 
           <div className="grid grid-cols-1 gap-3">
              {product.specs.map((s, i) => (
                <div key={i} className="flex items-center gap-4 group/item">
-                 <div className={`w-5 h-5 rounded-lg bg-${accent}-500/10 flex items-center justify-center border border-${accent}-500/20`}>
-                    <Check className={`w-3 h-3 text-${accent}-500`} />
+                 <div className={`w-5 h-5 rounded-lg flex items-center justify-center border ${iconStyleClass}`}>
+                    <Check className="w-3 h-3" />
                  </div>
                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.15em]">{s}</span>
                </div>
