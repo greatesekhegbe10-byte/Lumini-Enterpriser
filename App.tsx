@@ -13,7 +13,8 @@ import {
   ShieldCheck, Loader2, X, Globe, User, 
   LogOut, Download, CheckCircle, Mail, ArrowRight, Zap, 
   Bot, ShoppingCart, SlidersHorizontal, CreditCard, 
-  MessageCircle, Twitter, Plus, Trash2, Key, BarChart3, Package, Users, ChevronDown
+  MessageCircle, Twitter, Plus, Trash2, Key, BarChart3, Package, Users, ChevronDown,
+  RefreshCw, Save, Database, AlertTriangle
 } from 'lucide-react';
 
 const ADMIN_PASSCODE = '09162502987';
@@ -30,6 +31,9 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('lumina_orders');
     return saved ? JSON.parse(saved) : [];
   });
+
+  // System Status State
+  const [systemStatus, setSystemStatus] = useState<'Synced' | 'Writing...'>('Synced');
 
   // UI States
   const [view, setView] = useState<'store' | 'checkout' | 'admin-login' | 'admin-dashboard' | 'about'>('store');
@@ -63,8 +67,18 @@ const App: React.FC = () => {
   const [minRating, setMinRating] = useState<number>(0);
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => { localStorage.setItem('lumina_products', JSON.stringify(allProducts)); }, [allProducts]);
-  useEffect(() => { localStorage.setItem('lumina_orders', JSON.stringify(orders)); }, [orders]);
+  // Persistence Effects with Status Feedback
+  useEffect(() => { 
+    setSystemStatus('Writing...');
+    localStorage.setItem('lumina_products', JSON.stringify(allProducts)); 
+    setTimeout(() => setSystemStatus('Synced'), 600);
+  }, [allProducts]);
+
+  useEffect(() => { 
+    setSystemStatus('Writing...');
+    localStorage.setItem('lumina_orders', JSON.stringify(orders)); 
+    setTimeout(() => setSystemStatus('Synced'), 600);
+  }, [orders]);
 
   const cartTotal = useMemo(() => cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0), [cartItems]);
 
@@ -149,6 +163,16 @@ const App: React.FC = () => {
 
   const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
+  };
+
+  const handleFactoryReset = () => {
+    if (window.confirm("CRITICAL WARNING: This will permanently delete all custom assets and order history. System will revert to factory defaults. Are you sure?")) {
+      setAllProducts(defaultProducts);
+      setOrders([]);
+      localStorage.removeItem('lumina_products');
+      localStorage.removeItem('lumina_orders');
+      alert("System Reset Complete.");
+    }
   };
 
   const renderAbout = () => (
@@ -337,13 +361,26 @@ const App: React.FC = () => {
 
         {view === 'admin-dashboard' && adminAuthenticated && (
           <div className="min-h-screen flex bg-slate-950">
+             {/* Admin Sidebar */}
              <div className="w-64 border-r border-slate-800 p-8 flex flex-col gap-6">
                 <div className="text-xl font-black uppercase text-indigo-500 flex items-center gap-2"><Key className="w-5 h-5" /> Ops Console</div>
+                
+                <div className="py-2 px-4 rounded-xl bg-slate-900 border border-slate-800 mb-4 flex items-center gap-3">
+                   <div className={`w-2 h-2 rounded-full ${systemStatus === 'Synced' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                   <span className="text-[9px] uppercase font-black text-slate-400">{systemStatus === 'Synced' ? 'Database Secure' : 'Syncing Core...'}</span>
+                </div>
+
                 <button onClick={() => setAdminTab('overview')} className={`p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'overview' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Overview</button>
                 <button onClick={() => setAdminTab('orders')} className={`p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'orders' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Transactions ({orders.length})</button>
                 <button onClick={() => setAdminTab('inventory')} className={`p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'inventory' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Asset Vault</button>
-                <button onClick={() => { setAdminAuthenticated(false); setView('store'); }} className="mt-auto p-4 text-red-500 text-xs font-black uppercase flex items-center gap-2 hover:bg-red-500/10 rounded-2xl transition-all"><LogOut className="w-4 h-4" /> Exit Console</button>
+                
+                <div className="mt-auto space-y-3">
+                   <button onClick={handleFactoryReset} className="w-full p-4 text-amber-500 hover:bg-amber-500/10 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 transition-all"><AlertTriangle className="w-3 h-3" /> Factory Reset</button>
+                   <button onClick={() => { setAdminAuthenticated(false); setView('store'); }} className="w-full p-4 text-red-500 text-xs font-black uppercase flex items-center gap-2 hover:bg-red-500/10 rounded-2xl transition-all"><LogOut className="w-4 h-4" /> Exit Console</button>
+                </div>
              </div>
+
+             {/* Admin Content */}
              <div className="flex-1 p-12 overflow-y-auto">
                 <h3 className="text-4xl font-black uppercase tracking-tighter mb-10">{adminTab === 'overview' ? 'Tactical Overview' : adminTab === 'orders' ? 'Payment Logs' : 'Inventory Control'}</h3>
                 
@@ -358,32 +395,39 @@ const App: React.FC = () => {
                 {adminTab === 'orders' && (
                   <div className="bg-slate-900 rounded-[32px] border border-slate-800 overflow-hidden shadow-2xl">
                      <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-950 text-slate-500 uppercase font-black text-[10px] tracking-widest"><tr><th className="p-6">Client</th><th className="p-6">Assets</th><th className="p-6">Total</th><th className="p-6">Gate</th><th className="p-6">Date</th></tr></thead>
+                        <thead className="bg-slate-950 text-slate-500 uppercase font-black text-[10px] tracking-widest"><tr><th className="p-6">Client</th><th className="p-6">Assets Purchased</th><th className="p-6">Total Paid</th><th className="p-6">Gateway</th><th className="p-6">Timestamp</th></tr></thead>
                         <tbody className="divide-y divide-slate-800">
                           {orders.map(o => (
                             <tr key={o.id} className="hover:bg-slate-800/30 transition-colors">
-                              <td className="p-6"><div className="font-bold">{o.customerName}</div><div className="text-[10px] text-slate-500">{o.customerEmail}</div></td>
-                              <td className="p-6 text-xs text-indigo-400">{o.items.map(i=>i.name).join(', ')}</td>
+                              <td className="p-6"><div className="font-bold text-white">{o.customerName}</div><div className="text-[10px] text-slate-500">{o.customerEmail}</div></td>
+                              <td className="p-6 text-xs font-medium text-indigo-400">{o.items.map(i=>i.name).join(', ')}</td>
                               <td className="p-6 font-black text-white">${o.total.toLocaleString()}</td>
                               <td className="p-6"><span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 text-[10px] font-black rounded-full uppercase border border-indigo-500/20">{o.paymentMethod}</span></td>
-                              <td className="p-6 text-slate-500">{new Date(o.date).toLocaleDateString()}</td>
+                              <td className="p-6 text-slate-500 text-xs font-mono">{new Date(o.date).toLocaleString()}</td>
                             </tr>
                           ))}
                         </tbody>
                      </table>
+                     {orders.length === 0 && <div className="p-10 text-center text-slate-500 font-medium">No transactions recorded in the system logs.</div>}
                   </div>
                 )}
 
                 {adminTab === 'inventory' && (
                   <div className="space-y-8">
-                     <button onClick={() => setIsAddProductModalOpen(true)} className="bg-indigo-600 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl hover:bg-indigo-500 transition-all"><Plus className="w-4 h-4" /> Deploy New Asset</button>
+                     <div className="flex justify-between items-center">
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Managing {allProducts.length} Secure Assets</p>
+                        <button onClick={() => setIsAddProductModalOpen(true)} className="bg-indigo-600 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl hover:bg-indigo-500 transition-all"><Plus className="w-4 h-4" /> Deploy New Asset</button>
+                     </div>
                      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                         {allProducts.map(p => (
                           <div key={p.id} className="bg-slate-900 border border-slate-800 p-4 rounded-3xl group relative hover:border-indigo-500/50 transition-colors shadow-lg">
-                             <button onClick={() => setAllProducts(prev => prev.filter(x=>x.id!==p.id))} className="absolute top-2 right-2 bg-red-500 p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-10"><Trash2 className="w-4 h-4" /></button>
+                             <button onClick={() => { if(confirm("Permanently delete this asset?")) setAllProducts(prev => prev.filter(x=>x.id!==p.id)) }} className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg"><Trash2 className="w-4 h-4" /></button>
                              <img src={p.image} className="w-full h-32 object-cover rounded-2xl mb-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-                             <h5 className="font-black text-xs uppercase mb-1">{p.name}</h5>
+                             <h5 className="font-black text-xs uppercase mb-1 truncate">{p.name}</h5>
                              <p className="text-indigo-500 font-black text-sm">${p.price}</p>
+                             <div className="mt-2 flex gap-1 flex-wrap">
+                                <span className="text-[9px] px-2 py-1 bg-slate-800 rounded-md text-slate-400">{p.category}</span>
+                             </div>
                           </div>
                         ))}
                      </div>
@@ -431,18 +475,38 @@ const App: React.FC = () => {
       {/* Modal for Adding Asset */}
       {isAddProductModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
-           <div className="bg-slate-900 border border-slate-800 p-10 rounded-[40px] max-w-lg w-full space-y-6 shadow-2xl">
-              <h4 className="text-xl font-black uppercase tracking-tighter">Deploy New Asset</h4>
-              <div className="space-y-4">
-                <input type="text" placeholder="Name" onChange={e=>setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
-                <input type="number" placeholder="Price ($)" onChange={e=>setNewProduct({...newProduct, price: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
-                <select onChange={e=>setNewProduct({...newProduct, category: e.target.value as Category})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
-                   {Object.values(Category).map(c=><option key={c} value={c}>{c}</option>)}
-                </select>
-                <textarea placeholder="Description" onChange={e=>setNewProduct({...newProduct, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 h-24 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
-                <input type="text" placeholder="Image URL (Unsplash)" onChange={e=>setNewProduct({...newProduct, image: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+           <div className="bg-slate-900 border border-slate-800 p-10 rounded-[40px] max-w-lg w-full space-y-6 shadow-2xl animate-in zoom-in-95">
+              <div className="flex justify-between items-center">
+                 <h4 className="text-xl font-black uppercase tracking-tighter">Deploy New Asset</h4>
+                 <button onClick={()=>setIsAddProductModalOpen(false)} className="hover:bg-slate-800 p-2 rounded-full"><X className="w-5 h-5" /></button>
               </div>
-              <div className="flex gap-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Asset Name</label>
+                   <input type="text" onChange={e=>setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Price ($)</label>
+                      <input type="number" onChange={e=>setNewProduct({...newProduct, price: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono" />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Category</label>
+                      <select onChange={e=>setNewProduct({...newProduct, category: e.target.value as Category})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-xs font-bold uppercase">
+                         {Object.values(Category).map(c=><option key={c} value={c}>{c}</option>)}
+                      </select>
+                   </div>
+                </div>
+                <div className="space-y-2">
+                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Description</label>
+                   <textarea onChange={e=>setNewProduct({...newProduct, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 h-24 focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm" />
+                </div>
+                <div className="space-y-2">
+                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Image URL</label>
+                   <input type="text" onChange={e=>setNewProduct({...newProduct, image: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-xs" />
+                </div>
+              </div>
+              <div className="flex gap-4 pt-4">
                 <button onClick={() => {
                   if(!newProduct.name || !newProduct.price) return;
                   const finalProd: Product = {
@@ -458,8 +522,7 @@ const App: React.FC = () => {
                   };
                   setAllProducts([...allProducts, finalProd]);
                   setIsAddProductModalOpen(false);
-                }} className="flex-grow bg-indigo-600 py-4 rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all">Confirm</button>
-                <button onClick={()=>setIsAddProductModalOpen(false)} className="bg-slate-800 px-8 py-4 rounded-2xl font-black uppercase hover:bg-slate-700 transition-all">Abort</button>
+                }} className="flex-grow bg-indigo-600 py-4 rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all flex items-center justify-center gap-2"><Save className="w-4 h-4" /> Save Asset</button>
               </div>
            </div>
         </div>
