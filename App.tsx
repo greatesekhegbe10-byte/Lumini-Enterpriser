@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useFlutterwave, closePaymentModal } from 'flutterwave-react-v3';
 import { products as defaultProducts, faqs } from './data';
 import { Product, CartItem, Category, Order } from './types';
@@ -12,7 +12,7 @@ import {
   LogOut, Download, CheckCircle, Mail, ArrowRight, Zap, 
   Bot, ShoppingCart, SlidersHorizontal, CreditCard, 
   MessageCircle, Twitter, Plus, Trash2, Key, BarChart3, Package, Users, ChevronDown,
-  RefreshCw, Save, Database, AlertTriangle
+  RefreshCw, Save, Database, AlertTriangle, Edit, Upload, FileJson
 } from 'lucide-react';
 
 const ADMIN_PASSCODE = '09162502987';
@@ -51,31 +51,35 @@ const App: React.FC = () => {
   // Admin States
   const [adminPasscodeInput, setAdminPasscodeInput] = useState('');
   const [adminAuthenticated, setAdminAuthenticated] = useState(false);
-  const [adminTab, setAdminTab] = useState<'overview' | 'orders' | 'inventory'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'orders' | 'inventory' | 'backup'>('overview');
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     category: Category.SAAS,
     billingModel: 'Subscription',
-    specs: [],
+    specs: ['Enterprise Grade', 'Provisioned Instant'],
     rating: 5.0
   });
 
   // Filters
   const [priceRange, setPriceRange] = useState<number>(5000);
   const [minRating, setMinRating] = useState<number>(0);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Persistence Effects with Status Feedback
   useEffect(() => { 
     setSystemStatus('Writing...');
     localStorage.setItem('lumina_products', JSON.stringify(allProducts)); 
-    setTimeout(() => setSystemStatus('Synced'), 600);
+    const timer = setTimeout(() => setSystemStatus('Synced'), 600);
+    return () => clearTimeout(timer);
   }, [allProducts]);
 
   useEffect(() => { 
     setSystemStatus('Writing...');
     localStorage.setItem('lumina_orders', JSON.stringify(orders)); 
-    setTimeout(() => setSystemStatus('Synced'), 600);
+    const timer = setTimeout(() => setSystemStatus('Synced'), 600);
+    return () => clearTimeout(timer);
   }, [orders]);
 
   const cartTotal = useMemo(() => cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0), [cartItems]);
@@ -171,6 +175,78 @@ const App: React.FC = () => {
       localStorage.removeItem('lumina_orders');
       alert("System Reset Complete.");
     }
+  };
+
+  // Admin Data Management
+  const handleEditProduct = (product: Product) => {
+    setNewProduct({ ...product });
+    setEditingId(product.id);
+    setIsAddProductModalOpen(true);
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    if(window.confirm("Are you sure you want to permanently delete this asset?")) {
+      setAllProducts(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const handleSaveProduct = () => {
+    if(!newProduct.name || !newProduct.price) return;
+    
+    if (editingId) {
+      setAllProducts(prev => prev.map(p => p.id === editingId ? { ...p, ...newProduct } as Product : p));
+    } else {
+      const finalProd: Product = {
+        id: `p-${Date.now()}`,
+        name: newProduct.name!,
+        price: newProduct.price!,
+        category: newProduct.category as Category || Category.SAAS,
+        description: newProduct.description || 'Secure Asset',
+        image: newProduct.image || FALLBACK_IMAGE,
+        rating: newProduct.rating || 5.0,
+        specs: newProduct.specs || ['Enterprise Grade', 'Provisioned Instant'],
+        billingModel: newProduct.billingModel || 'One-time'
+      };
+      setAllProducts(prev => [...prev, finalProd]);
+    }
+    
+    setIsAddProductModalOpen(false);
+    setEditingId(null);
+    setNewProduct({ category: Category.SAAS, billingModel: 'Subscription', specs: ['Enterprise Grade'], rating: 5.0 });
+  };
+
+  const handleExportData = () => {
+    const data = {
+      products: allProducts,
+      orders: orders,
+      timestamp: new Date().toISOString(),
+      version: '1.0'
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lumina-system-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.products && Array.isArray(data.products)) setAllProducts(data.products);
+        if (data.orders && Array.isArray(data.orders)) setOrders(data.orders);
+        alert("System Restoration & Sync Complete.");
+      } catch (err) {
+        alert("Error: Corrupt or Invalid Data File.");
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const renderAbout = () => (
@@ -360,7 +436,7 @@ const App: React.FC = () => {
         {view === 'admin-dashboard' && adminAuthenticated && (
           <div className="min-h-screen flex bg-slate-950">
              {/* Admin Sidebar */}
-             <div className="w-64 border-r border-slate-800 p-8 flex flex-col gap-6">
+             <div className="w-64 border-r border-slate-800 p-8 flex flex-col gap-6 overflow-y-auto">
                 <div className="text-xl font-black uppercase text-indigo-500 flex items-center gap-2"><Key className="w-5 h-5" /> Ops Console</div>
                 
                 <div className="py-2 px-4 rounded-xl bg-slate-900 border border-slate-800 mb-4 flex items-center gap-3">
@@ -368,191 +444,203 @@ const App: React.FC = () => {
                    <span className="text-[9px] uppercase font-black text-slate-400">{systemStatus === 'Synced' ? 'Database Secure' : 'Syncing Core...'}</span>
                 </div>
 
-                <button onClick={() => setAdminTab('overview')} className={`p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'overview' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Overview</button>
-                <button onClick={() => setAdminTab('orders')} className={`p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'orders' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Transactions ({orders.length})</button>
-                <button onClick={() => setAdminTab('inventory')} className={`p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'inventory' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Asset Vault</button>
+                <div className="space-y-2">
+                  <button onClick={() => setAdminTab('overview')} className={`w-full p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'overview' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Overview</button>
+                  <button onClick={() => setAdminTab('inventory')} className={`w-full p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'inventory' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Assets Inventory</button>
+                  <button onClick={() => setAdminTab('orders')} className={`w-full p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'orders' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>Order Log</button>
+                  <button onClick={() => setAdminTab('backup')} className={`w-full p-4 rounded-2xl text-left text-xs font-black uppercase tracking-widest transition-all ${adminTab === 'backup' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-900'}`}>System Backup</button>
+                </div>
                 
-                <div className="mt-auto space-y-3">
-                   <button onClick={handleFactoryReset} className="w-full p-4 text-amber-500 hover:bg-amber-500/10 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 transition-all"><AlertTriangle className="w-3 h-3" /> Factory Reset</button>
-                   <button onClick={() => { setAdminAuthenticated(false); setView('store'); }} className="w-full p-4 text-red-500 text-xs font-black uppercase flex items-center gap-2 hover:bg-red-500/10 rounded-2xl transition-all"><LogOut className="w-4 h-4" /> Exit Console</button>
+                <div className="mt-auto pt-6 border-t border-slate-800">
+                  <button onClick={() => setView('store')} className="flex items-center gap-3 text-slate-500 text-xs font-black uppercase tracking-widest hover:text-white"><LogOut className="w-4 h-4" /> Exit Console</button>
                 </div>
              </div>
 
              {/* Admin Content */}
-             <div className="flex-1 p-12 overflow-y-auto">
-                <h3 className="text-4xl font-black uppercase tracking-tighter mb-10">{adminTab === 'overview' ? 'Tactical Overview' : adminTab === 'orders' ? 'Payment Logs' : 'Inventory Control'}</h3>
-                
+             <div className="flex-grow p-10 overflow-y-auto max-h-screen">
                 {adminTab === 'overview' && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                     <div className="bg-slate-900 p-10 rounded-[40px] border border-slate-800 shadow-xl"><p className="text-slate-500 uppercase text-[10px] font-black mb-2">Total Revenue</p><h4 className="text-5xl font-black tracking-tighter">${orders.reduce((a,b)=>a+b.total, 0).toLocaleString()}</h4></div>
-                     <div className="bg-slate-900 p-10 rounded-[40px] border border-slate-800 shadow-xl"><p className="text-slate-500 uppercase text-[10px] font-black mb-2">Total Sales</p><h4 className="text-5xl font-black tracking-tighter">{orders.length}</h4></div>
-                     <div className="bg-slate-900 p-10 rounded-[40px] border border-slate-800 shadow-xl"><p className="text-slate-500 uppercase text-[10px] font-black mb-2">Active Assets</p><h4 className="text-5xl font-black tracking-tighter">{allProducts.length}</h4></div>
-                  </div>
-                )}
-
-                {adminTab === 'orders' && (
-                  <div className="bg-slate-900 rounded-[32px] border border-slate-800 overflow-hidden shadow-2xl">
-                     <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-950 text-slate-500 uppercase font-black text-[10px] tracking-widest"><tr><th className="p-6">Client</th><th className="p-6">Assets Purchased</th><th className="p-6">Total Paid</th><th className="p-6">Gateway</th><th className="p-6">Timestamp</th></tr></thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {orders.map(o => (
-                            <tr key={o.id} className="hover:bg-slate-800/30 transition-colors">
-                              <td className="p-6"><div className="font-bold text-white">{o.customerName}</div><div className="text-[10px] text-slate-500">{o.customerEmail}</div></td>
-                              <td className="p-6 text-xs font-medium text-indigo-400">{o.items.map(i=>i.name).join(', ')}</td>
-                              <td className="p-6 font-black text-white">${o.total.toLocaleString()}</td>
-                              <td className="p-6"><span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 text-[10px] font-black rounded-full uppercase border border-indigo-500/20">{o.paymentMethod}</span></td>
-                              <td className="p-6 text-slate-500 text-xs font-mono">{new Date(o.date).toLocaleString()}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                     </table>
-                     {orders.length === 0 && <div className="p-10 text-center text-slate-500 font-medium">No transactions recorded in the system logs.</div>}
+                  <div className="space-y-8">
+                     <h2 className="text-3xl font-black uppercase tracking-tighter">System <span className="text-indigo-500">Metrics</span></h2>
+                     <div className="grid grid-cols-3 gap-6">
+                        <div className="bg-slate-900 p-8 rounded-[30px] border border-slate-800">
+                           <div className="flex items-center gap-4 mb-2 text-slate-500">
+                              <Package className="w-5 h-5" />
+                              <span className="text-xs font-black uppercase tracking-widest">Active Assets</span>
+                           </div>
+                           <div className="text-4xl font-black text-white">{allProducts.length}</div>
+                        </div>
+                        <div className="bg-slate-900 p-8 rounded-[30px] border border-slate-800">
+                           <div className="flex items-center gap-4 mb-2 text-slate-500">
+                              <Users className="w-5 h-5" />
+                              <span className="text-xs font-black uppercase tracking-widest">Total Clients</span>
+                           </div>
+                           <div className="text-4xl font-black text-white">{new Set(orders.map(o => o.customerEmail)).size}</div>
+                        </div>
+                        <div className="bg-slate-900 p-8 rounded-[30px] border border-slate-800">
+                           <div className="flex items-center gap-4 mb-2 text-slate-500">
+                              <BarChart3 className="w-5 h-5" />
+                              <span className="text-xs font-black uppercase tracking-widest">Revenue</span>
+                           </div>
+                           <div className="text-4xl font-black text-emerald-500">${orders.reduce((a, b) => a + b.total, 0).toLocaleString()}</div>
+                        </div>
+                     </div>
                   </div>
                 )}
 
                 {adminTab === 'inventory' && (
                   <div className="space-y-8">
-                     <div className="flex justify-between items-center">
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Managing {allProducts.length} Secure Assets</p>
-                        <button onClick={() => setIsAddProductModalOpen(true)} className="bg-indigo-600 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 shadow-xl hover:bg-indigo-500 transition-all"><Plus className="w-4 h-4" /> Deploy New Asset</button>
-                     </div>
-                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                        {allProducts.map(p => (
-                          <div key={p.id} className="bg-slate-900 border border-slate-800 p-4 rounded-3xl group relative hover:border-indigo-500/50 transition-colors shadow-lg">
-                             <button onClick={() => { if(confirm("Permanently delete this asset?")) setAllProducts(prev => prev.filter(x=>x.id!==p.id)) }} className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg"><Trash2 className="w-4 h-4" /></button>
-                             <img src={p.image} className="w-full h-32 object-cover rounded-2xl mb-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-                             <h5 className="font-black text-xs uppercase mb-1 truncate">{p.name}</h5>
-                             <p className="text-indigo-500 font-black text-sm">${p.price}</p>
-                             <div className="mt-2 flex gap-1 flex-wrap">
-                                <span className="text-[9px] px-2 py-1 bg-slate-800 rounded-md text-slate-400">{p.category}</span>
-                             </div>
-                          </div>
-                        ))}
-                     </div>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-3xl font-black uppercase tracking-tighter">Asset <span className="text-indigo-500">Control</span></h2>
+                      <button onClick={() => { setEditingId(null); setIsAddProductModalOpen(true); }} className="bg-indigo-600 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest flex items-center gap-2 hover:bg-indigo-500 transition-colors"><Plus className="w-4 h-4" /> Deploy New Asset</button>
+                    </div>
+
+                    <div className="bg-slate-900 rounded-[30px] border border-slate-800 overflow-hidden">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-950 border-b border-slate-800 text-xs font-black uppercase tracking-widest text-slate-500">
+                          <tr>
+                            <th className="p-6">Asset Name</th>
+                            <th className="p-6">Category</th>
+                            <th className="p-6">Value</th>
+                            <th className="p-6 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {allProducts.map(p => (
+                            <tr key={p.id} className="hover:bg-slate-800/50 transition-colors">
+                              <td className="p-6 font-bold">{p.name}</td>
+                              <td className="p-6 text-sm text-slate-400">{p.category}</td>
+                              <td className="p-6 font-mono text-emerald-500">${p.price}</td>
+                              <td className="p-6 flex items-center justify-end gap-3">
+                                <button onClick={() => handleEditProduct(p)} className="p-2 bg-slate-800 rounded-lg hover:bg-indigo-600 hover:text-white transition-colors"><Edit className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteProduct(p.id)} className="p-2 bg-slate-800 rounded-lg hover:bg-red-600 hover:text-white transition-colors"><Trash2 className="w-4 h-4" /></button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
+                )}
+
+                {adminTab === 'backup' && (
+                   <div className="space-y-8">
+                      <h2 className="text-3xl font-black uppercase tracking-tighter">System <span className="text-indigo-500">Persistence</span></h2>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                         <div className="bg-slate-900 border border-slate-800 p-10 rounded-[40px] space-y-6">
+                            <div className="w-16 h-16 bg-indigo-600/20 rounded-2xl flex items-center justify-center text-indigo-500 mb-4"><Save className="w-8 h-8" /></div>
+                            <h3 className="text-xl font-black uppercase">Create System Backup</h3>
+                            <p className="text-slate-400 text-sm">Download a JSON snapshot of your current inventory, products, and order history.</p>
+                            <button onClick={handleExportData} className="w-full bg-indigo-600 py-4 rounded-xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-500">
+                               <Download className="w-4 h-4" /> Download Snapshot
+                            </button>
+                         </div>
+
+                         <div className="bg-slate-900 border border-slate-800 p-10 rounded-[40px] space-y-6 relative overflow-hidden">
+                            <div className="w-16 h-16 bg-emerald-600/20 rounded-2xl flex items-center justify-center text-emerald-500 mb-4"><Database className="w-8 h-8" /></div>
+                            <h3 className="text-xl font-black uppercase">Restore System</h3>
+                            <p className="text-slate-400 text-sm">Upload a previously saved JSON snapshot to restore your system state.</p>
+                            <div className="relative">
+                               <input type="file" accept=".json" onChange={handleImportData} ref={fileInputRef} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                               <button className="w-full bg-slate-800 py-4 rounded-xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-slate-700">
+                                  <Upload className="w-4 h-4" /> Upload Snapshot
+                               </button>
+                            </div>
+                         </div>
+                      </div>
+
+                      <div className="mt-12 p-8 border border-red-900/50 bg-red-900/10 rounded-[30px] flex items-center justify-between">
+                         <div className="flex items-center gap-4">
+                            <AlertTriangle className="w-8 h-8 text-red-500" />
+                            <div>
+                               <h4 className="font-black text-red-500 uppercase tracking-widest">Factory Reset</h4>
+                               <p className="text-red-400/60 text-xs mt-1">Irreversible action. Wipes all local data.</p>
+                            </div>
+                         </div>
+                         <button onClick={handleFactoryReset} className="bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-colors">Initiate Reset</button>
+                      </div>
+                   </div>
                 )}
              </div>
           </div>
         )}
-      </main>
 
-      {/* Footer / Socials */}
-      <footer className="bg-slate-950 border-t border-slate-800 py-24 px-4">
-         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-16">
-            <div className="space-y-6">
-               <div className="flex items-center gap-3 font-black text-2xl uppercase tracking-tighter"><Shield className="text-indigo-500" /> Lumina</div>
-               <p className="text-slate-500 text-sm leading-relaxed">Securing your digital enterprise with audited assets and military-grade SaaS.</p>
-            </div>
-            <div>
-               <h4 className="font-black uppercase tracking-widest text-[10px] text-slate-300 mb-8">Direct Contact</h4>
-               <div className="flex flex-col gap-4 text-slate-500 text-xs font-bold uppercase tracking-widest">
-                  <a href="mailto:alextechenterprise@gmail.com" className="hover:text-white flex items-center gap-3 transition-colors"><Mail className="w-4 h-4" /> Headquarters</a>
-                  <a href="https://wa.me/2348072760199" target="_blank" className="hover:text-white flex items-center gap-3 transition-colors"><MessageCircle className="w-4 h-4 text-emerald-500" /> WhatsApp (08072760199)</a>
-                  <a href="https://x.com/esekhegbe70321" target="_blank" className="hover:text-white flex items-center gap-3 transition-colors"><Twitter className="w-4 h-4 text-blue-400" /> X (@esekhegbe70321)</a>
+        {/* Modals & Drawers */}
+        <CartDrawer 
+          isOpen={isCartOpen} 
+          onClose={() => setIsCartOpen(false)} 
+          items={cartItems} 
+          onUpdateQuantity={updateQuantity} 
+          onRemove={removeItem}
+          onCheckout={() => { setIsCartOpen(false); navigateTo('checkout'); }}
+        />
+
+        {activeProduct && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-[#020617]/90 backdrop-blur-md" onClick={() => setActiveProduct(null)} />
+            <div className="relative bg-slate-900 w-full max-w-4xl rounded-[40px] border border-slate-800 shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
+               <div className="w-full md:w-1/2 h-64 md:h-auto relative bg-slate-800">
+                  <img src={activeProduct.image} className="w-full h-full object-cover opacity-80" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent" />
+                  <div className="absolute bottom-8 left-8">
+                     <div className="bg-indigo-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest w-fit mb-4">{activeProduct.category}</div>
+                     <h2 className="text-3xl font-black uppercase tracking-tighter leading-none">{activeProduct.name}</h2>
+                  </div>
                </div>
-            </div>
-            <div>
-               <h4 className="font-black uppercase tracking-widest text-[10px] text-slate-300 mb-8">Tactical Hub</h4>
-               <div className="flex flex-col gap-4 text-slate-500 text-xs font-bold uppercase tracking-widest">
-                  <button onClick={() => navigateTo('about')} className="hover:text-white text-left transition-colors">The Mission</button>
-                  <button onClick={() => navigateTo('store')} className="hover:text-white text-left transition-colors">Marketplace</button>
-               </div>
-            </div>
-            <div>
-               <h4 className="font-black uppercase tracking-widest text-[10px] text-slate-300 mb-8">System Control</h4>
-               <button onClick={() => setView('admin-login')} className="flex items-center gap-2 text-slate-700 hover:text-indigo-500 text-[10px] font-black uppercase tracking-[0.2em] transition-all"><Key className="w-3 h-3" /> System Access</button>
-               <p className="mt-8 text-[10px] text-slate-800 font-black uppercase">© 2024 ALEX TECH ENTERPRISE</p>
-            </div>
-         </div>
-      </footer>
-
-      {/* Overlays */}
-      <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} items={cartItems} onUpdateQuantity={updateQuantity} onRemove={removeItem} onCheckout={() => navigateTo('checkout')} />
-      <AIChat products={allProducts} />
-      
-      {/* Modal for Adding Asset */}
-      {isAddProductModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
-           <div className="bg-slate-900 border border-slate-800 p-10 rounded-[40px] max-w-lg w-full space-y-6 shadow-2xl animate-in zoom-in-95">
-              <div className="flex justify-between items-center">
-                 <h4 className="text-xl font-black uppercase tracking-tighter">Deploy New Asset</h4>
-                 <button onClick={()=>setIsAddProductModalOpen(false)} className="hover:bg-slate-800 p-2 rounded-full"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Asset Name</label>
-                   <input type="text" onChange={e=>setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-2">
-                      <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Price ($)</label>
-                      <input type="number" onChange={e=>setNewProduct({...newProduct, price: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono" />
-                   </div>
-                   <div className="space-y-2">
-                      <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Category</label>
-                      <select onChange={e=>setNewProduct({...newProduct, category: e.target.value as Category})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-xs font-bold uppercase">
-                         {Object.values(Category).map(c=><option key={c} value={c}>{c}</option>)}
-                      </select>
-                   </div>
-                </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Description</label>
-                   <textarea onChange={e=>setNewProduct({...newProduct, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 h-24 focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm" />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Image URL</label>
-                   <input type="text" onChange={e=>setNewProduct({...newProduct, image: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-xs" />
-                </div>
-              </div>
-              <div className="flex gap-4 pt-4">
-                <button onClick={() => {
-                  if(!newProduct.name || !newProduct.price) return;
-                  const finalProd: Product = {
-                    id: `p-${Date.now()}`,
-                    name: newProduct.name!,
-                    price: newProduct.price!,
-                    category: newProduct.category as Category,
-                    description: newProduct.description || 'Secure Asset',
-                    image: newProduct.image || FALLBACK_IMAGE,
-                    rating: 5.0,
-                    specs: ['Enterprise Grade', 'Provisioned Instant'],
-                    billingModel: 'One-time'
-                  };
-                  setAllProducts([...allProducts, finalProd]);
-                  setIsAddProductModalOpen(false);
-                }} className="flex-grow bg-indigo-600 py-4 rounded-2xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all flex items-center justify-center gap-2"><Save className="w-4 h-4" /> Save Asset</button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {/* Product Details Modal */}
-      {activeProduct && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-sm">
-           <div className="bg-slate-900 border border-slate-800 max-w-4xl w-full rounded-[40px] overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in zoom-in-95">
-              <div className="md:w-1/2 h-64 md:h-auto shrink-0 relative">
-                 <img src={activeProduct.image} className="w-full h-full object-cover opacity-60" />
-                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent" />
-              </div>
-              <div className="p-10 flex flex-col gap-6">
-                 <span className="text-indigo-500 text-[10px] font-black uppercase tracking-[0.5em]">{activeProduct.category}</span>
-                 <h2 className="text-4xl font-black uppercase tracking-tighter">{activeProduct.name}</h2>
-                 <p className="text-slate-400 text-sm leading-relaxed">{activeProduct.description}</p>
-                 <div className="grid grid-cols-1 gap-3 mt-4">
-                    {activeProduct.specs.map(s => <div key={s} className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-300"><CheckCircle className="w-4 h-4 text-emerald-500" /> {s}</div>)}
-                 </div>
-                 <div className="mt-auto pt-8 border-t border-slate-800 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Investment Fee</p>
-                      <p className="text-3xl font-black">${activeProduct.price.toLocaleString()}</p>
+               <div className="p-10 md:w-1/2 overflow-y-auto">
+                  <p className="text-slate-400 font-medium leading-relaxed mb-8">{activeProduct.description}</p>
+                  {activeProduct.disclaimer && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl mb-8 flex gap-3">
+                       <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                       <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wide leading-relaxed">{activeProduct.disclaimer}</p>
                     </div>
-                    <button onClick={() => { addToCart(activeProduct); setActiveProduct(null); }} className="bg-white text-slate-900 px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-indigo-600 hover:text-white transition-all">Deploy Now</button>
-                 </div>
-              </div>
-              <button onClick={() => setActiveProduct(null)} className="absolute top-6 right-6 p-2 bg-slate-800 rounded-full hover:bg-red-500 transition-colors"><X /></button>
-           </div>
-        </div>
-      )}
+                  )}
+                  <div className="space-y-3 mb-8">
+                     {activeProduct.specs.map((s, i) => (
+                       <div key={i} className="flex items-center gap-3">
+                          <CheckCircle className="w-4 h-4 text-indigo-500" />
+                          <span className="text-sm font-bold text-slate-300">{s}</span>
+                       </div>
+                     ))}
+                  </div>
+                  <div className="flex items-center justify-between border-t border-slate-800 pt-8">
+                     <div>
+                        <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Total Investment</span>
+                        <span className="text-3xl font-black text-white">${activeProduct.price.toLocaleString()}</span>
+                     </div>
+                     <button onClick={() => { addToCart(activeProduct); setActiveProduct(null); }} className="bg-white hover:bg-indigo-600 text-slate-900 hover:text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl">
+                        Add to Cart
+                     </button>
+                  </div>
+                  <button onClick={() => setActiveProduct(null)} className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 rounded-full text-white backdrop-blur-sm"><X className="w-5 h-5" /></button>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {isAddProductModalOpen && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-[#020617]/90 backdrop-blur-md" onClick={() => setIsAddProductModalOpen(false)} />
+            <div className="relative bg-slate-900 w-full max-w-lg p-8 rounded-[30px] border border-slate-800 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+               <h3 className="text-2xl font-black uppercase tracking-tighter">{editingId ? 'Edit Asset' : 'Deploy New Asset'}</h3>
+               <div className="space-y-4">
+                  <input placeholder="Asset Name" value={newProduct.name || ''} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl" />
+                  <input placeholder="Price (USD)" type="number" value={newProduct.price || ''} onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})} className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl" />
+                  <select value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value as Category})} className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl text-slate-400">
+                     {Object.values(Category).map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <textarea placeholder="Description" value={newProduct.description || ''} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl h-24" />
+                  <input placeholder="Image URL" value={newProduct.image || ''} onChange={e => setNewProduct({...newProduct, image: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-4 rounded-xl" />
+               </div>
+               <button onClick={handleSaveProduct} className="w-full bg-indigo-600 py-4 rounded-xl font-black uppercase text-xs tracking-widest hover:bg-indigo-500">
+                  {editingId ? 'Update Asset' : 'Confirm Deployment'}
+               </button>
+            </div>
+          </div>
+        )}
+
+        <AIChat products={allProducts} />
+      </main>
     </div>
   );
 };

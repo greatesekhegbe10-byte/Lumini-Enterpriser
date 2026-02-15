@@ -1,9 +1,10 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Product } from "../types";
 
-// Initialize Gemini with the proper structure.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize Gemini with the proper structure. 
+// Fallback to empty string to prevent crash on init if env is missing in preview
+const apiKey = process.env.API_KEY || '';
+const ai = new GoogleGenAI({ apiKey });
 
 const generateSystemInstruction = (currentProducts: Product[]) => `You are Lumina, the Lead Technical Strategist for "Lumina Global".
 We are an all-in-one platform for digital business success. Our offerings include:
@@ -23,6 +24,9 @@ Always emphasize trust, innovation, and security.`;
  * getAIResponse handles user interaction with Lumina AI.
  */
 export const getAIResponse = async (userMessage: string, history: { role: 'user' | 'model', content: string }[], currentProducts: Product[]) => {
+  if (!apiKey) {
+    return "Lumina Neural Link Offline: API Key missing in environment configuration.";
+  }
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -45,6 +49,7 @@ export const getAIResponse = async (userMessage: string, history: { role: 'user'
  * semanticSearchProducts uses the model to map user intent to specific product IDs.
  */
 export const semanticSearchProducts = async (query: string, currentProducts: Product[]): Promise<string[]> => {
+  if (!apiKey) return [];
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
