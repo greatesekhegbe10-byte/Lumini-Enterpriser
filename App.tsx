@@ -1,6 +1,4 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { usePaystackPayment } from 'react-paystack';
 import { useFlutterwave, closePaymentModal } from 'flutterwave-react-v3';
 import { products as defaultProducts, faqs } from './data';
 import { Product, CartItem, Category, Order } from './types';
